@@ -1,3 +1,115 @@
+# Gemmified-gm-recomp
+
+This is a fork of gm-recomp that packages it as a plugin for any host that speaks the GEMS plugin
+protocol. gm-recomp runs Windows GameMaker games in the browser from their original executables:
+it statically recompiles the real GameMaker runner (and the game's own x86 code) to WebAssembly and
+implements the Windows APIs it calls. The plugin runs GameMaker 8 (`gm8`) and GameMaker: Studio 1.4
+(`gms1`) games. The upstream project's README follows [below](#gm-recomp).
+
+## Install
+
+Give a GEMS host this update feed:
+
+```
+https://gemmified-gm-recomp.dappermink.me/latest.json
+```
+
+The feed lists only the latest release, and the host uses it to install the engine and keep it
+up to date. A release publishes the plugin as
+`https://gemmified-gm-recomp.dappermink.me/<version>/gm-recomp-<version>.zip`, with Wine's source
+next to it (see [Licence](#licence)), and makes it the only version in the feed. Builds of earlier
+versions are then deleted.
+
+## The plugin
+
+A plugin is a directory with two parts:
+
+- `plugin.json`: the manifest. It holds `id`, `version`, `apiVersion`, `entry`, `name`,
+  `formats`, `description`, `author`, `updates` (the feed above) and `capabilities`.
+  `host/build.ts` writes it from `host/src/plugin.ts`, so the two always agree.
+- `host.js` (built from `host/src/plugin.ts`): the entry module. Its default export has an
+  `accepts(files)` method, which picks a game's `.exe`, and a `create(host)` method, which
+  returns a session.
+
+The rest of the directory is what the engine loads: `web.wasm` (the runtime, `crates/web`),
+`worker.js`, `audio-worklet.js`, the translation profiles in `profiles/`, and Wine's DLLs in
+`system32/`.
+
+The engine runs in a worker (`host/src/worker.ts`, around upstream's `web/src/host.mjs`) and draws
+into an `OffscreenCanvas` the host hands it. The worker and `host.js` talk over a `MessagePort`: the
+host sends the game's files and saves, input and launch arguments, and the engine sends back its
+save writes, dialogs and loopback connections. `host/gems/` holds both ends of that protocol, the
+plugin interface types and the virtual filesystem saves go through. The runtime keeps its own virtual clock, so the plugin declares
+`clock: "engine"` and each step is one presented frame. Its sound is mixed PCM, which the worker
+writes into a shared ring that `host.js` plays through an `AudioWorklet`. The host page must be
+cross-origin isolated, because the ring uses `SharedArrayBuffer`.
+
+No SoundFont is shipped, so MIDI music is silent.
+
+## Build and test
+
+You need Rust nightly with the `wasm32-unknown-unknown` target, Node 22 and pnpm. `pnpm build`
+also needs `curl`, `ar`, `tar`, `python3`, `objcopy` and `objdump`, to fetch and strip Wine's
+DLLs.
+
+```sh
+pnpm install
+pnpm run typecheck
+pnpm run format:check
+pnpm run lint
+pnpm run test          # the release scripts' tests and host/src/paths.test.ts
+pnpm run build         # Wine's DLLs into system32/, then the runtime into dist/
+pnpm run build:host    # host.js, worker.js and plugin.json into host/dist/
+pnpm run package       # the plugin directory, in plugin/
+```
+
+The native unit tests and the CPU differential tests need an x86 machine with 32-bit gcc:
+
+```sh
+cargo test --release --workspace
+cargo run --release -p harness -- cpu-diff --mode x87fast --count 5000
+```
+
+### Releasing
+
+Every pull request is checked by `.github/workflows/pull-request.yml`. A release is started by hand:
+Actions, Release, Run workflow, on `downstream`. It takes the version from the live feed and
+increases the part you choose (patch by default), or takes an exact version. It builds the plugin
+as that version, uploads it and Wine's source, replaces the feed, and creates the `v<version>` tag
+and GitHub release. `package.json`'s version is only a placeholder, so there is never a version-bump
+commit.
+
+## Relation to gm-recomp
+
+This repository is a fork of [gm-recomp](https://github.com/KurathSec/gm-recomp). Its default
+branch, `downstream`, is upstream commit
+[`9d38d08`](https://github.com/KurathSec/gm-recomp/commit/9d38d083de3691288ebea49f57da6225e3b58f26)
+(2026-10-27) plus this fork's changes. `git diff 9d38d08 downstream` lists everything this fork
+changes. Upstream has newer commits that are not merged here. Here is a summary:
+
+- `host/` and `scripts/` are new. They are the plugin's entry module, its worker, the protocol code
+  in `host/gems/`, Wine's DLLs (`scripts/system32.sh`) and the release tooling.
+- `crates/gmmod` is removed, with everything that used it: the page's Mods (Play online among
+  them), `web/src/mods.mjs`, `web/tools/mods.sh` and `web/tools/iwpo/`. The upstream README's
+  Mods section below does not apply to this fork.
+- `crates/web` takes the game's launch arguments (`set_args`), and `web/src/host.mjs` passes them
+  and connects the game's sockets to loopback ports the host provides.
+- `crates/runtime`: Winsock imports by ordinal reach the real sockets, and `StretchBlt`/`BitBlt`
+  copy between DCs with 24- or 32-bit bitmaps selected.
+
+## Licence
+
+gm-recomp is licensed MIT and so is this fork. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+- Wine's DLLs, which the plugin ships in `system32/`, are LGPL-2.1-or-later. They are not in this
+  repository: `scripts/system32.sh` fetches them from WineHQ's Wine 11.0 build when you build. Their
+  licence, copyright notice and source location go beside them, and every release publishes
+  `wine-11.0.tar.xz` at `https://gemmified-gm-recomp.dappermink.me/<version>/wine-11.0.tar.xz`.
+- The runtime links symphonia (MPL-2.0), rustc_apfloat (Apache-2.0 WITH LLVM-exception) and
+  encoding_rs ((Apache-2.0 OR MIT) AND BSD-3-Clause).
+
+---
+
 # gm-recomp
 
 Windows GameMaker games running in desktop browsers, from their original executables.

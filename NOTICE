@@ -1,0 +1,41 @@
+Gemmified-gm-recomp
+===================
+
+A fork of gm-recomp <https://github.com/KurathSec/gm-recomp> that packages it as
+a plugin for hosts that speak the GEMS plugin protocol.
+
+It is based on upstream commit 9d38d083de3691288ebea49f57da6225e3b58f26
+(2026-10-27). Upstream commits after that one are not included.
+
+gm-recomp is licensed MIT and so is this fork; see LICENSE. Copyright in the
+original work is retained by KurathSec. Modifications in this fork, including
+host/ and scripts/, are Copyright (c) 2026 Dapper Mink, under the same MIT
+licence (host/gems/LICENSE repeats it for that directory).
+
+This fork removes upstream's crates/gmmod (game-file patching tooling, which
+carried encodings derived from UndertaleModLib, GPL-3.0, with no licence note)
+and everything that used it, so no UndertaleModLib-derived code is in this
+repository or its builds.
+
+Third-party components
+----------------------
+
+Wine DLLs. The plugin build carries, in system32/, 32-bit DLLs from WineHQ's
+own build of Wine 11.0 <https://www.winehq.org/>: the redistributable runtimes
+(C/C++ runtimes, the shader compiler, D3DX 9, msacm32, and what they import)
+that games call but do not ship. They are not in this repository:
+scripts/system32.sh downloads WineHQ's package, checks its sha256, and strips
+the DLLs' debug sections. They are licensed LGPL-2.1-or-later, and the runtime
+loads them as separate files, like a game's own DLLs. Wine's licence
+(COPYING.LIB), its copyright notice (LICENSE) and a README saying where the
+source is go beside them in system32/. Their source, wine-11.0.tar.xz, is
+published beside each release, at
+https://gemmified-gm-recomp.dappermink.me/<version>/wine-11.0.tar.xz, and is
+also at https://dl.winehq.org/wine/source/11.0/wine-11.0.tar.xz.
+
+Rust crates linked into the browser runtime (web.wasm), whose licences are not
+MIT or MIT/Apache-2.0:
+  - symphonia (MP3 decoding): MPL-2.0, file-level copyleft; its source is at
+    <https://github.com/pdeljanov/Symphonia> and on crates.io.
+  - rustc_apfloat: Apache-2.0 WITH LLVM-exception.
+  - encoding_rs: (Apache-2.0 OR MIT) AND BSD-3-Clause.

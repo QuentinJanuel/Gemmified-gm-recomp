@@ -1834,22 +1834,6 @@ pub fn register(r: &mut Registry) {
     r.add("ws2_32.dll", "ntohs", |c| ok(1, (c.arg(0) as u16).swap_bytes() as u32));
     r.add("ws2_32.dll", "htonl", |c| ok(1, c.arg(0).swap_bytes()));
     r.add("ws2_32.dll", "ntohl", |c| ok(1, c.arg(0).swap_bytes()));
-    // Imports by ordinal (the numbers are the same in wsock32 for these).
-    for (ord, name) in [
-        (1, "accept"), (2, "bind"), (3, "closesocket"), (4, "connect"), (5, "getpeername"), (6, "getsockname"),
-        (7, "getsockopt"), (8, "htonl"), (9, "htons"), (10, "ioctlsocket"), (11, "inet_addr"), (12, "inet_ntoa"),
-        (13, "listen"), (14, "ntohl"), (15, "ntohs"), (16, "recv"), (17, "recvfrom"), (18, "select"), (19, "send"),
-        (20, "sendto"), (21, "setsockopt"), (22, "shutdown"), (23, "socket"), (51, "gethostbyaddr"),
-        (52, "gethostbyname"), (53, "getprotobyname"), (55, "getservbyname"), (57, "gethostname"),
-        (101, "WSAAsyncSelect"), (111, "WSAGetLastError"), (112, "WSASetLastError"), (115, "WSAStartup"),
-        (116, "WSACleanup"), (151, "__WSAFDIsSet"),
-    ] {
-        r.alias("ws2_32.dll", &format!("#{ord}"), "ws2_32.dll", name);
-        r.alias("wsock32.dll", &format!("#{ord}"), "ws2_32.dll", name);
-    }
-    for name in ["WSAStartup", "WSACleanup", "WSAGetLastError", "socket", "closesocket", "connect", "bind", "listen", "accept", "send", "sendto", "recv", "recvfrom", "select", "ioctlsocket", "setsockopt", "getsockopt", "getsockname", "getpeername", "shutdown", "gethostname", "gethostbyname", "gethostbyaddr", "inet_addr", "inet_ntoa", "htons", "ntohs", "htonl", "ntohl", "WSAAsyncSelect", "__WSAFDIsSet"] {
-        r.alias("wsock32.dll", name, "ws2_32.dll", name);
-    }
     // Wine's wined3d (supplied for its HLSL compiler) imports the kernel-mode display
     // thunks and WGL; there is no OpenGL or display driver behind them.
     const STATUS_NOT_SUPPORTED: u32 = 0xC000_00BB;

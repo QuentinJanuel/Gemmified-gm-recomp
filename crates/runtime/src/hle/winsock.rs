@@ -650,6 +650,23 @@ pub fn register(r: &mut Registry) {
         c.p.heap_free(p);
         ok(1, 0)
     });
+    // Imports by ordinal (the numbers are the same in wsock32 for these), and wsock32 by name.
+    // (after the calls above: an alias takes the function registered at the time)
+    for (ord, name) in [
+        (1, "accept"), (2, "bind"), (3, "closesocket"), (4, "connect"), (5, "getpeername"), (6, "getsockname"),
+        (7, "getsockopt"), (8, "htonl"), (9, "htons"), (10, "ioctlsocket"), (11, "inet_addr"), (12, "inet_ntoa"),
+        (13, "listen"), (14, "ntohl"), (15, "ntohs"), (16, "recv"), (17, "recvfrom"), (18, "select"), (19, "send"),
+        (20, "sendto"), (21, "setsockopt"), (22, "shutdown"), (23, "socket"), (51, "gethostbyaddr"),
+        (52, "gethostbyname"), (53, "getprotobyname"), (55, "getservbyname"), (57, "gethostname"),
+        (101, "WSAAsyncSelect"), (111, "WSAGetLastError"), (112, "WSASetLastError"), (115, "WSAStartup"),
+        (116, "WSACleanup"), (151, "__WSAFDIsSet"),
+    ] {
+        r.alias("ws2_32.dll", &format!("#{ord}"), "ws2_32.dll", name);
+        r.alias("wsock32.dll", &format!("#{ord}"), "ws2_32.dll", name);
+    }
+    for name in ["WSAStartup", "WSACleanup", "WSAGetLastError", "socket", "closesocket", "connect", "bind", "listen", "accept", "send", "sendto", "recv", "recvfrom", "select", "ioctlsocket", "setsockopt", "getsockopt", "getsockname", "getpeername", "shutdown", "gethostname", "gethostbyname", "gethostbyaddr", "inet_addr", "inet_ntoa", "htons", "ntohs", "htonl", "ntohl", "WSAAsyncSelect", "__WSAFDIsSet"] {
+        r.alias("wsock32.dll", name, "ws2_32.dll", name);
+    }
 }
 
 /// Sends a datagram from UDP socket `s` to `to` (one host connection per destination).
@@ -709,4 +726,16 @@ fn recv_from(c: &mut Ctx, s: u32, buf: u32, len: u32, from: u32, fromlen: u32, n
         }
     }
     fail(c, nargs, WSAEWOULDBLOCK)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn ordinals_and_wsock32_reach_these_sockets() {
+        let r = super::Registry::new();
+        let f = |dll: &str, name: &str| r.entries[r.by_name[&(dll.to_owned(), name.to_owned())].0 as usize].func.map(|f| f as usize);
+        assert_eq!(f("ws2_32.dll", "#23"), f("ws2_32.dll", "socket"));
+        assert_eq!(f("wsock32.dll", "#4"), f("ws2_32.dll", "connect"));
+        assert_eq!(f("wsock32.dll", "recv"), f("ws2_32.dll", "recv"));
+    }
 }

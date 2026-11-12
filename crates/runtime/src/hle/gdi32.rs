@@ -427,6 +427,53 @@ fn copy_rows(c: &mut Ctx, dst: u32, src: u32, pitch: u32, start: u32, lines: u32
     lines
 }
 
+/// StretchBlt/BitBlt between DCs with 24- or 32-bit bitmaps selected (nearest neighbour).
+/// GameMaker 8.0's sprite_add decodes a PNG into one DIB and copies it into another this
+/// way; without the copy the sprite came out black.
+/// shortcut: SRCCOPY only, and no window DCs or other depths; extend when a game needs them.
+fn blt(c: &mut Ctx, a: [u32; 11]) -> u32 {
+    const SRCCOPY: u32 = 0xCC0020;
+    let [hd, xd, yd, wd, hgt_d, hs, xs, ys, ws, hgt_s, rop] = a;
+    let (xd, yd, wd, hgt_d, xs, ys, ws, hgt_s) = (xd as i32, yd as i32, wd as i32, hgt_d as i32, xs as i32, ys as i32, ws as i32, hgt_s as i32);
+    let bmp = |c: &Ctx, dc| match selected_bitmap(c, dc).and_then(|b| gdi(c, b)) {
+        Some(GdiObject::Bitmap { w, h, bpp: bpp @ (24 | 32), bits, pitch }) if bits != 0 => Some((w, h, bpp, bits, pitch)),
+        _ => None,
+    };
+    let (Some(d), Some(s)) = (bmp(c, hd), bmp(c, hs)) else { return 1 };
+    if rop != SRCCOPY || wd == 0 || hgt_d == 0 {
+        return 1;
+    }
+    // (logical row y of a bitmap: bottom-up when its height is positive)
+    let row = |(_, h, _, bits, pitch): (i32, i32, u32, u32, u32), y: i32| bits + pitch * if h > 0 { (h - 1 - y) as u32 } else { y as u32 };
+    let (dbpp, sbpp) = ((d.2 / 8) as i32, (s.2 / 8) as i32);
+    let (mut src, mut dst) = (vec![0u8; s.4 as usize], vec![0u8; d.4 as usize]);
+    for j in 0..hgt_d.abs() {
+        let y = yd + j * hgt_d.signum();
+        let sy = ys + ((2 * j + 1) * hgt_s).div_euclid(2 * hgt_d.abs());
+        if y < 0 || y >= d.1.abs() || sy < 0 || sy >= s.1.abs() {
+            continue;
+        }
+        let (srow, drow) = (row(s, sy), row(d, y));
+        if c.host.read(srow, &mut src).is_err() || c.host.read(drow, &mut dst).is_err() {
+            continue;
+        }
+        for i in 0..wd.abs() {
+            let x = xd + i * wd.signum();
+            let sx = xs + ((2 * i + 1) * ws).div_euclid(2 * wd.abs());
+            if x < 0 || x >= d.0 || sx < 0 || sx >= s.0 {
+                continue;
+            }
+            let (so, dof) = ((sx * sbpp) as usize, (x * dbpp) as usize);
+            dst[dof..dof + 3].copy_from_slice(&src[so..so + 3]);
+            if dbpp == 4 {
+                dst[dof + 3] = if sbpp == 4 { src[so + 3] } else { 0 };
+            }
+        }
+        let _ = c.host.write(drow, &dst);
+    }
+    1
+}
+
 pub fn register(r: &mut Registry) {
     let g = "gdi32.dll";
     // ---- DCs -----------------------------------------------------------------
@@ -937,8 +984,16 @@ pub fn register(r: &mut Registry) {
     });
 
     // ---- drawing (no rasterisation in the harness) ---------------------------
-    r.add(g, "BitBlt", |_c| ok(9, 1));
-    r.add(g, "StretchBlt", |_c| ok(11, 1));
+    r.add(g, "BitBlt", |c| {
+        let a: [u32; 9] = std::array::from_fn(|i| c.arg(i as u32));
+        let v = blt(c, [a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[3], a[4], a[8]]);
+        ok(9, v)
+    });
+    r.add(g, "StretchBlt", |c| {
+        let a = std::array::from_fn(|i| c.arg(i as u32));
+        let v = blt(c, a);
+        ok(11, v)
+    });
     r.add(g, "PatBlt", |_c| ok(6, 1));
     r.add(g, "MaskBlt", |_c| ok(12, 1));
     r.add(g, "PlgBlt", |_c| ok(10, 1));

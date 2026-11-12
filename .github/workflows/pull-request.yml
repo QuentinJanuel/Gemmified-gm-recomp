@@ -1,0 +1,35 @@
+name: Pull request
+
+# Checks and builds every pull request. Nothing is published from here: releases are started by hand
+# (release.yml).
+on: pull_request
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pull-request-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/build
+        with:
+          checks: "true"
+
+  # The unit tests, and the CPU differential tests: translated code against the host CPU running the
+  # same cases natively, which needs an x86 machine and 32-bit gcc.
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install stable --profile minimal --no-self-update
+      - name: 32-bit gcc (the CPU reference program)
+        run: sudo apt-get update && sudo apt-get install -y gcc-multilib
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --workspace
+      - run: cargo test --release --workspace
+      - run: cargo run --release -p harness -- cpu-diff --mode x87fast --count 5000

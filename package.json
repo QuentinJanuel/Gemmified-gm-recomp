@@ -1,0 +1,25 @@
+{
+  "name": "gemmified-gm-recomp",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "sh scripts/system32.sh && rm -rf dist && CARGO_PROFILE_RELEASE_DEBUG=0 cargo +nightly build --release --target wasm32-unknown-unknown -p web --target-dir target/wasm && mkdir dist && cp target/wasm/wasm32-unknown-unknown/release/web.wasm dist/",
+    "build:host": "tsx host/build.ts",
+    "typecheck": "tsc --noEmit -p host",
+    "lint": "oxlint host",
+    "test": "node --test scripts/next-version.test.mjs scripts/publish-feed.test.mjs scripts/prune-old-versions.test.mjs && tsx --test host/src/paths.test.ts",
+    "format": "oxfmt host",
+    "format:check": "oxfmt --check host",
+    "package": "rm -rf plugin && mkdir plugin && cp -R dist/. host/dist/. plugin/ && cp web/src/audio-worklet.js plugin/ && cp -R system32 web/public/profiles plugin/"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "esbuild": "^0.28.2",
+    "oxfmt": "^0.64.0",
+    "oxlint": "^1.79.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.0"
+  },
+  "packageManager": "pnpm@11.5.0"
+}

@@ -3,7 +3,6 @@
 import { asset } from './asset.mjs';
 import { GL_OPTIONS } from './gpu.mjs';
 import { runGame } from './host.mjs';
-import { applyMods, pageMod, selectedMods } from './mods.mjs';
 import { KEYS } from './keys.mjs';
 import { applySaves, loadGame, loadProfile, loadSaves, openSaves, storeProfile, storeSaves } from './saves.mjs';
 
@@ -209,7 +208,7 @@ self.onmessage = async ({ data }) => {
     };
   }
   game = data.game;
-  const { frames = 0, epoch, canvas, capture = [], pace = true, pacing = 'sync', ahead = true, script = [], persist = true, monitor = false, replay = null, slowMs, inputRing, useProfile = true, local = false, modChoices = {}, role = 'main' } = data;
+  const { frames = 0, epoch, canvas, capture = [], pace = true, pacing = 'sync', ahead = true, script = [], persist = true, monitor = false, replay = null, slowMs, inputRing, useProfile = true, local = false, role = 'main' } = data;
   instant = !!data.instantLoad;
   active = role !== 'standby';
   ctl.muted = ctl.standby = !active;
@@ -254,17 +253,6 @@ self.onmessage = async ({ data }) => {
     }
     // the folders the game comes with empty (a save folder), as paths ending in '/'
     for (const d of manifest.dirs ?? []) downloaded.push([`${d}/`, new Uint8Array(0), 0]);
-    // The mods chosen for the game change its files before the saves go on top.
-    const chosen = selectedMods(modChoices, manifest.engine);
-    for (const id of Object.keys(modChoices)) {
-      if (modChoices[id]?.on && !chosen.some((m) => m.id === id)) post(`mod ${id}: does not work with this game's engine, left out`);
-    }
-    const mods = chosen.filter((m) => !pageMod(m.id));
-    if (mods.length) {
-      const t = performance.now();
-      downloaded = await applyMods(downloaded, manifest, mods, post);
-      post(`mods ${mods.map((m) => m.id).join(', ')} applied in ${((performance.now() - t) / 1000).toFixed(1)}s`);
-    }
     let db = null;
     let files = downloaded;
     if (persist) {
@@ -418,9 +406,7 @@ self.onmessage = async ({ data }) => {
       if (Atomics.load(st, 0) === 2) return null;
       return new TextDecoder().decode(new Uint8Array(promptSab, 8, Math.min(Atomics.load(st, 1), 4096)).slice());
     };
-    // the guest's network connections go through PlayOnline's relay, when it is on
-    const relayUrl = mods.find((m) => m.id === 'PlayOnline')?.config.RelayUrl || undefined;
-    const status = await runGame({ relayUrl, prompt, runtimeBytes, files, exe: manifest.entry, frames, epoch, print, canvas, pace, pacing, ahead, onFrame, onReady, onResize, audioRing, onSave, onStats, monitor, onSlow, replay: replay?.input, inputRing, profile, onProfile, sharedProfile, ctl: instant ? ctl : undefined, stateThreads: store ? Math.min(3, (navigator.hardwareConcurrency || 2) - 2) : 0 });
+    const status = await runGame({ prompt, runtimeBytes, files, exe: manifest.entry, frames, epoch, print, canvas, pace, pacing, ahead, onFrame, onReady, onResize, audioRing, onSave, onStats, monitor, onSlow, replay: replay?.input, inputRing, profile, onProfile, sharedProfile, ctl: instant ? ctl : undefined, stateThreads: store ? Math.min(3, (navigator.hardwareConcurrency || 2) - 2) : 0 });
     await saving;
     await profileSaving;
     self.postMessage({ type: 'done', status });

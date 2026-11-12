@@ -13,7 +13,6 @@ const GAME_KEYS = /^(Arrow|Space|Tab|Backspace|F\d|Enter|Shift|Control|Alt|Key|D
  * @param {string} o.game  the game's slug
  * @param {boolean} [o.local]  imported in this browser (import.mjs), rather than served at games/<slug>/
  * @param {HTMLCanvasElement} o.canvas
- * @param {Record<string, {on: boolean, config?: object}>} [o.modChoices]  the mods to apply (mods.mjs)
  * @param {Record<string, string>} [o.keymap]  a key you press (KeyboardEvent.code) -> the key the game gets
  * @param {Record<string, () => void>} [o.pageKeys]  keys the page handles itself, never sent to the game
  * @param {number} [o.epoch]  the date the game sees (Unix seconds; default now)
@@ -22,7 +21,7 @@ const GAME_KEYS = /^(Arrow|Space|Tab|Backspace|F\d|Enter|Shift|Control|Alt|Key|D
  *   saves and loads them (statepanel.mjs is a page's list of them)
  * @param {boolean} [o.instantLoad]  with save states: a second copy of the game waits,
  *   loaded and stopped, at the state last saved or loaded, and takes over at a load of it
- *   (at once; about twice the memory). Not with a game online (PlayOnline).
+ *   (at once; about twice the memory).
  * Test and diagnosis options, as worker.mjs takes them: frames, pace, pacing, ahead, script,
  * capture, monitor, replay, slowMs, useProfile.
  * Callbacks: onLog(line), onSize(w, h) (the game's resolution), onStats(stats),
@@ -36,7 +35,7 @@ const GAME_KEYS = /^(Arrow|Space|Tab|Backspace|F\d|Enter|Shift|Control|Alt|Key|D
  * @returns {{worker: Worker, setKeymap(map): void, soundStats(): Promise<string | null>, stop(): void, states: object | null}}
  */
 export function playGame(o) {
-  const { game, local = false, canvas, modChoices = {}, pageKeys = {} } = o;
+  const { game, local = false, canvas, pageKeys = {} } = o;
   let keymap = o.keymap ?? {};
   const listeners = [];
   const listen = (target, type, f) => {
@@ -44,7 +43,7 @@ export function playGame(o) {
     listeners.push(() => target.removeEventListener(type, f));
   };
   // (the standby stops at a state in a suspending import: JSPI)
-  const instant = !!(o.saveStates && o.instantLoad && typeof WebAssembly.Suspending === 'function' && !modChoices.PlayOnline?.on);
+  const instant = !!(o.saveStates && o.instantLoad && typeof WebAssembly.Suspending === 'function');
 
   // The copies of the game: the one playing (`cur`) and, for instant loads, the one
   // waiting at a state (`standby`). Each has its worker, canvas, key ring and sound ring.
@@ -180,7 +179,6 @@ export function playGame(o) {
     persist: o.persist ?? true,
     slowMs: o.slowMs,
     useProfile: o.useProfile ?? true,
-    modChoices,
     instantLoad: instant,
   };
   /** Starts a copy of the game in `el` ('main': the one playing; 'standby'). */

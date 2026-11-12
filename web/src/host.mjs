@@ -52,13 +52,16 @@ function mergeProfiles(a, b) {
  *   the same triples, to add to it, with the modules loaded at the start (to file them by module)
  * @param {string} [o.relayUrl]  a WebSocket relay (tools/relay.mjs) for the guest's network
  *   connections; without one, sockets fail to connect
+ * @param {(host: string, port: number, udp: boolean) => {send(d: Uint8Array): void, receive(): Uint8Array, readonly closed: boolean, close(): void} | null} [o.connect]
+ *   instead of a relay: the guest's connection, open at once, or null to refuse it
+ * @param {string[]} [o.args]  the arguments the game is launched with, after the executable
  * @param {(modules: {base: number, size: number, id: number}[]) => Promise<Uint32Array|null>} [o.sharedProfile]
  *   what other games with the same modules needed (a runner's code is the same in every game built
  *   with it), added to `profile`
  * @param {number} [o.stateThreads]  helper threads (state-map.mjs) that map save states' fresh
  *   buffers
  */
-export async function runGame({ runtimeBytes, files, exe, frames = 0, trace = false, epoch = Math.floor(Date.now() / 1000), print = console.log, onExit, canvas, pace = true, pacing = 'clock', ahead = true, onFrame, onReady, onResize, audioRing, onSave, soundfontUrl = asset('soundfont.sf2'), onStats, monitor = false, onSlow, replay, inputRing, profile, onProfile, sharedProfile, relayUrl, prompt, ctl, stateThreads = 0 }) {
+export async function runGame({ runtimeBytes, files, exe, frames = 0, trace = false, epoch = Math.floor(Date.now() / 1000), print = console.log, onExit, canvas, pace = true, pacing = 'clock', ahead = true, onFrame, onReady, onResize, audioRing, onSave, soundfontUrl = asset('soundfont.sf2'), onStats, monitor = false, onSlow, replay, inputRing, profile, onProfile, sharedProfile, relayUrl, connect, args = [], prompt, ctl, stateThreads = 0 }) {
   const dec = new TextDecoder();
   const enc = new TextEncoder();
   let rt;
@@ -719,9 +722,22 @@ export async function runGame({ runtimeBytes, files, exe, frames = 0, trace = fa
   // (tools/relay.mjs), which makes the TCP connection or sends the UDP datagrams;
   // nothing connects without `relayUrl`.
   const conns = new Map(); // id -> {ws, udp, state (0 connecting, 1 open, 2 closed, 3 failed), chunks, pending}
+  // (a `connect` connection is polled: what arrived since, and whether it closed)
+  const pull = (c) => {
+    if (!c?.polled) return;
+    const d = c.ws.receive();
+    if (d.length) c.chunks.push(d);
+    if (c.ws.closed) c.state = 2;
+  };
   const netImports = {
-    net_enabled: () => (relayUrl ? 1 : 0),
+    net_enabled: () => (relayUrl || connect ? 1 : 0),
     net_open(id, udp, hostPtr, hostLen, port) {
+      if (connect) {
+        const ws = connect(dec.decode(mem().subarray(hostPtr, hostPtr + hostLen)), port, !!udp);
+        if (!ws) return 0;
+        conns.set(id, { ws, udp: !!udp, state: 1, chunks: [], pending: [], polled: true });
+        return 1;
+      }
       if (!relayUrl) return 0;
       const url = new URL(relayUrl, location.href);
       url.searchParams.set('proto', udp ? 'udp' : 'tcp');
@@ -758,6 +774,7 @@ export async function runGame({ runtimeBytes, files, exe, frames = 0, trace = fa
     net_recv(id, ptr, len) {
       const c = conns.get(id);
       if (!c) return 0;
+      pull(c);
       if (!c.chunks.length) return c.state >= 2 && !c.udp ? 0 : -1;
       if (c.udp) {
         const d = c.chunks.shift();
@@ -778,10 +795,12 @@ export async function runGame({ runtimeBytes, files, exe, frames = 0, trace = fa
     },
     net_available(id) {
       const c = conns.get(id);
+      pull(c);
       if (!c || !c.chunks.length) return 0;
       return c.udp ? Math.max(1, c.chunks[0].length) : c.chunks.reduce((a, d) => a + d.length, 0);
     },
     net_state(id) {
+      pull(conns.get(id));
       return conns.get(id)?.state ?? 3;
     },
     net_close(id) {
@@ -889,6 +908,13 @@ export async function runGame({ runtimeBytes, files, exe, frames = 0, trace = fa
         },
       },
     });
+  }
+  if (args.length) {
+    // (quoted as Windows splits a command line: CommandLineToArgvW)
+    const line = enc.encode(args.map((a) => (/[\s"]/.test(a) || a === '' ? `"${a.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1')}"` : a)).join(' '));
+    const lp = x.alloc(line.length);
+    mem().set(line, lp);
+    x.set_args(lp, line.length);
   }
   if (x.init(ep, e.length, frames, trace ? 1 : 0, epoch, nopIndex, gpu ? 1 : 0) !== 0) {
     throw new Error('init failed');

@@ -261,9 +261,11 @@ struct State {
     polls: u32,
     /// The table slot of the glue's `nop64`.
     nop64: u32,
+    /// What the command line has after the executable (`set_args`), with its leading space.
+    args: String,
 }
 
-static mut STATE: State = State { input: Vec::new(), files: Vec::new(), engine: None, glue: None, fs: None, started: None, guest_bytes: 0, soundfont_requested: false, soundfont: None, replay: std::collections::VecDeque::new(), drained: (u64::MAX, 0), waited: false, polls: 0, nop64: 0 };
+static mut STATE: State = State { input: Vec::new(), files: Vec::new(), engine: None, glue: None, fs: None, started: None, guest_bytes: 0, soundfont_requested: false, soundfont: None, replay: std::collections::VecDeque::new(), drained: (u64::MAX, 0), waited: false, polls: 0, nop64: 0, args: String::new() };
 
 #[allow(static_mut_refs)]
 fn state() -> &'static mut State {
@@ -884,13 +886,20 @@ pub unsafe extern "C" fn fs_add(path: *const u8, path_len: usize, data: *mut u8,
     state().fs.get_or_insert_with(MemFs::new).insert_with_time(&path, data, filetime);
 }
 
+/// The arguments the game is launched with, as the command line has them after the executable
+/// (already quoted). Before `init`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn set_args(args: *const u8, len: usize) {
+    state().args = format!(" {}", String::from_utf8_lossy(unsafe { std::slice::from_raw_parts(args, len) }));
+}
+
 /// Creates the process and loads the executable. Returns 0 on success.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn init(exe: *const u8, exe_len: usize, frames: u32, trace: u32, epoch_unix: f64, nop_index: u32, render: u32) -> i32 {
     let exe = String::from_utf8_lossy(unsafe { std::slice::from_raw_parts(exe, exe_len) }).into_owned();
     let fs = state().fs.take().unwrap_or_default();
     let exe_path = format!("C:\\game\\{exe}");
-    let mut p = Process::new(Box::new(fs), &exe_path, &format!("\"{exe_path}\""));
+    let mut p = Process::new(Box::new(fs), &exe_path, &format!("\"{exe_path}\"{}", state().args));
     p.frame_limit = if frames == 0 { u64::MAX } else { frames as u64 };
     p.trace = trace != 0;
     p.epoch_unix = epoch_unix as u64;
