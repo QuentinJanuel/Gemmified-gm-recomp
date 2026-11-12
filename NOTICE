@@ -39,3 +39,4 @@ MIT or MIT/Apache-2.0:
     <https://github.com/pdeljanov/Symphonia> and on crates.io.
   - rustc_apfloat: Apache-2.0 WITH LLVM-exception.
   - encoding_rs: (Apache-2.0 OR MIT) AND BSD-3-Clause.
+
