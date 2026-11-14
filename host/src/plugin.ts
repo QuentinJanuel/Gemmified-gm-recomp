@@ -95,6 +95,22 @@ export function manifest(version: string): PluginManifest {
       "Runs GameMaker 8 and GameMaker Studio 1.4 games in the browser by recompiling the original GameMaker runner from x86 to WebAssembly.",
     author: "Dapper Mink",
     updates: "https://gemmified-gm-recomp.dappermink.me/latest.json",
+    credits: [
+      {
+        name: "gm-recomp",
+        license: "MIT",
+        url: "https://github.com/QuentinJanuel/Gemmified-gm-recomp",
+        copyright: "Copyright (c) 2026 KurathSec",
+        upstream: "https://github.com/KurathSec/gm-recomp",
+      },
+      {
+        name: "Wine (redistributable DLLs)",
+        license: "LGPL-2.1-or-later",
+        url: "https://gitlab.winehq.org/wine/wine",
+        copyright: "Copyright (C) The Wine project",
+        note: "The source archive of the version shipped is published beside each gm-recomp build.",
+      },
+    ],
     capabilities: plugin.capabilities,
   };
 }
