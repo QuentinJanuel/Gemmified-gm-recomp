@@ -49,6 +49,18 @@ export interface PluginAsset {
   readonly optional?: boolean;
 }
 
+/** One component a plugin ships, with its licence and where its source is (SPEC §3.2). */
+export interface Credit {
+  readonly name: string;
+  readonly license: string;
+  /** An https URL of the source of what the plugin ships. */
+  readonly url: string;
+  readonly copyright?: string;
+  /** An https URL of the upstream project. */
+  readonly upstream?: string;
+  readonly note?: string;
+}
+
 /** A plugin, as its manifest declares it. */
 export interface PluginManifest {
   /**
@@ -89,6 +101,8 @@ export interface PluginManifest {
   readonly author?: string;
   /** An https URL of the update feed (`latest.json`) that lists this engine's releases. Advisory. */
   readonly updates?: string;
+  /** What this plugin ships and under which licence, at most 20 entries; advisory (SPEC §3.2). */
+  readonly credits?: readonly Credit[];
   /** Every payload file. See `PluginAsset`; omitted or empty means the entry module is self-contained. */
   readonly assets?: readonly PluginAsset[];
   /**
